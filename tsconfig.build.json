@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "module": "nodenext"
+  },
+  "include": ["src/**/*", "HttpExample/**/*"],
+  "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]
+}
