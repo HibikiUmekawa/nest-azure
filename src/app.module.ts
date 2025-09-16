@@ -8,7 +8,10 @@ import { UploadModule } from './upload.module';
 @Module({
   imports: [
     UploadModule,
-    MongooseModule.forRoot(process.env.MONGODB_URI!),
+    MongooseModule.forRoot(process.env.MONGODB_URI!, {
+      dbName: process.env.MONGODB_DB_NAME || 'videos',
+    }),
+    MongooseModule,
     MongooseModule.forFeature([{ name: Video.name, schema: VideoSchema }]),
   ],
   controllers: [AppController],

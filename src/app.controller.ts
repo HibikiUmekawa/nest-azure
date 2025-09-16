@@ -11,6 +11,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query as QueryParam,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -45,7 +46,6 @@ function sanitizeBlobName(original: string): string {
     .replace(/^([/\\])+/, '')
     .replace(/[/\\]+/g, '_')
     .trim();
-  // ブロブ名に使いづらい制御文字などを避ける
   const safe = justName.replace(/\s+/g, '_');
   if (!safe) throw new Error('Invalid blob name');
   return `${Date.now()}-${safe}`;
@@ -63,17 +63,84 @@ export class AppController {
     @InjectModel(Video.name) private readonly videoModel: Model<VideoDocument>,
   ) {
     const conn = process.env.AZURE_STORAGE_CONNECTION_STRING!;
-    if (!conn) {
+    if (!conn)
       throw new Error('AZURE_STORAGE_CONNECTION_STRING が未設定です。');
-    }
     this.blobServiceClient = BlobServiceClient.fromConnectionString(conn);
     this.sharedKey = getSharedKeyFromConnString(conn);
   }
 
-  /** 動作確認用 */
+  /** 動作確認用（?list=videos で一覧を返す） */
   @Get()
-  getHello(): string {
-    return 'Hello World!';
+  async getHello(
+    @QueryParam('list') list?: string,
+    @QueryParam('page') pageQ?: string,
+    @QueryParam('limit') limitQ?: string,
+    @QueryParam('q') q?: string,
+    @QueryParam('debug') debugQ?: string,
+  ) {
+    if (list !== 'videos') return 'Hello World!';
+
+    // debug=1 のときは接続DBと件数だけ返す
+    if (debugQ === '1') {
+      const dbName = 'test'; // 例: "test" or "videos"
+      const collection = this.videoModel.collection.collectionName; // 例: "videos"
+      const count = await this.videoModel.estimatedDocumentCount();
+      return { dbName, collection, count };
+    }
+
+    const page = Math.max(1, parseInt(pageQ ?? '1', 10) || 1);
+    const limit = Math.min(
+      100,
+      Math.max(1, parseInt(limitQ ?? '20', 10) || 20),
+    );
+    const skip = (page - 1) * limit;
+
+    const filter =
+      q && q.trim()
+        ? { originalName: { $regex: q.trim(), $options: 'i' } }
+        : {};
+
+    const projection = {
+      _id: 0,
+      fileName: 1,
+      originalName: 1,
+      contentType: 1,
+      uploadedAt: 1,
+    } as const;
+
+    const docs = await this.videoModel
+      .find(filter, projection)
+      .sort({ uploadedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const items = docs.map((d) => ({
+      ...d,
+      url: this.generateSasUrl(d.fileName),
+    }));
+    console.log('items', items);
+    console.log('itemsaa');
+
+    return { items, page, limit, hasMore: docs.length === limit };
+  }
+
+  /** （将来用の）サブパス版。function.json をワイルドカード化したら有効になります */
+  @Get('videos')
+  async listVideos() {
+    const docs = await this.videoModel
+      .find(
+        {},
+        { fileName: 1, originalName: 1, contentType: 1, uploadedAt: 1, _id: 0 },
+      )
+      .sort({ uploadedAt: -1 })
+      .limit(20)
+      .lean();
+
+    return docs.map((d) => ({
+      ...d,
+      url: this.generateSasUrl(d.fileName),
+    }));
   }
 
   /** アップロード */
@@ -93,7 +160,6 @@ export class AppController {
       const blobName = sanitizeBlobName(file.originalname ?? 'upload.bin');
       const blockBlobClient = containerClient.getBlockBlobClient(blobName);
 
-      // Content-Type を付与してアップロード
       await blockBlobClient.uploadData(file.buffer, {
         blobHTTPHeaders: {
           blobContentType: file.mimetype || 'application/octet-stream',
@@ -111,12 +177,8 @@ export class AppController {
         uploadedAt: new Date(),
       });
 
-      return {
-        fileName: blobName,
-        url: sasUrl,
-      };
+      return { fileName: blobName, url: sasUrl };
     } catch (error: unknown) {
-      // トラブルシュートしやすいよう情報を付与
       throw new HttpException(
         {
           message: 'Upload failed',
@@ -138,9 +200,8 @@ export class AppController {
     const blobClient = containerClient.getBlobClient(safe);
 
     const exists = await blobClient.exists();
-    if (!exists) {
+    if (!exists)
       throw new HttpException('File not found', HttpStatus.NOT_FOUND);
-    }
 
     const sasUrl = this.generateSasUrl(safe);
     return { url: sasUrl };
@@ -158,7 +219,7 @@ export class AppController {
         containerName: this.containerName,
         blobName: fileName,
         permissions: BlobSASPermissions.parse('r'),
-        startsOn: new Date(Date.now() - 60 * 1000), // 時刻ずれ対策で1分前から有効
+        startsOn: new Date(Date.now() - 60 * 1000),
         expiresOn: new Date(Date.now() + 10 * 60 * 1000),
       },
       this.sharedKey,
