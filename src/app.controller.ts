@@ -227,4 +227,32 @@ export class AppController {
 
     return `${blobClient.url}?${sas}`;
   }
+
+  /** サムネイルアップロード */
+  @Post('upload-thumbnail')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadThumbnail(@UploadedFile() file: UploadedFileData) {
+    if (!file) {
+      throw new HttpException('No file uploaded', HttpStatus.BAD_REQUEST);
+    }
+
+    const thumbContainer = 'thumbnails';
+    const containerClient =
+      this.blobServiceClient.getContainerClient(thumbContainer);
+    await containerClient.createIfNotExists({
+      access: 'blob', // ← ここで「匿名公開: Blob」設定をコード側からも可能
+    });
+
+    const blobName = sanitizeBlobName(file.originalname ?? 'thumbnail.png');
+    const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+
+    await blockBlobClient.uploadData(file.buffer, {
+      blobHTTPHeaders: {
+        blobContentType: file.mimetype || 'image/png',
+      },
+    });
+
+    // 公開 URL をそのまま返す
+    return { url: blockBlobClient.url };
+  }
 }
