@@ -7,6 +7,9 @@ export class Category {
   _id: string; // cat001 など
 
   @Prop({ required: true })
+  orgId: string; // org001 など
+
+  @Prop({ required: true })
   name: string; // "大分類A"
 
   @Prop({ required: true, enum: ['major', 'middle', 'minor'] })
