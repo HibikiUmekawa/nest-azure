@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Put,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -47,6 +48,39 @@ export class CategoryController {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  /** 指定IDのカテゴリ名（タイトル）を更新 */
+  @Put(':id')
+  async updateTitleById(
+    @Param('id') idParam: string,
+    @Body('name') name: string,
+  ) {
+    if (!idParam) {
+      throw new HttpException('id is required', HttpStatus.BAD_REQUEST);
+    }
+    if (!name) {
+      throw new HttpException('name is required', HttpStatus.BAD_REQUEST);
+    }
+    const decoded = this.decodeBase64UrlSafe(idParam) || idParam;
+    const primary = await this.categoryModel.updateOne(
+      { _id: decoded },
+      { $set: { name } },
+    );
+    const result = primary.matchedCount
+      ? primary
+      : await this.categoryModel.updateOne(
+          { _id: idParam },
+          { $set: { name } },
+        );
+    if (!result.matchedCount) {
+      throw new HttpException('Not Found', HttpStatus.NOT_FOUND);
+    }
+    return {
+      success: true,
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount,
+    };
   }
 
   /** 大分類一覧 */
