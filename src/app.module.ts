@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CategoryModule } from './mongodb/categories/category.module';
+import { MetadataModule } from './mongodb/metadata/metadata.module';
 import { MessageModule } from './mongodb/mongodb.module';
 import { Video, VideoSchema } from './schemas/video.schema';
 import { UploadModule } from './upload.module';
@@ -17,6 +18,7 @@ import { UploadModule } from './upload.module';
     MongooseModule.forFeature([{ name: Video.name, schema: VideoSchema }]),
     MessageModule,
     CategoryModule,
+    MetadataModule,
   ],
   controllers: [AppController],
   providers: [AppService],
