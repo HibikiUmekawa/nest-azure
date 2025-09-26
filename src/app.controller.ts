@@ -220,7 +220,7 @@ export class AppController {
         blobName: fileName,
         permissions: BlobSASPermissions.parse('r'),
         startsOn: new Date(Date.now() - 60 * 1000),
-        expiresOn: new Date(Date.now() + 10 * 60 * 1000),
+        expiresOn: new Date(Date.now() + 60 * 60 * 1000), // SAS有効期限60分
       },
       this.sharedKey,
     ).toString();
